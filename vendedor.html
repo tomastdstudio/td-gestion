@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <meta name="theme-color" content="#111827"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+  <link rel="manifest" href="manifest.json"/>
+  <title>TD Gestión — Vendedor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div id="splash"><div id="splash-logo">TOMÁS DOTTI</div><div id="splash-sub">BOLSAS Y ROLLOS DE RESIDUOS</div><div id="splash-dot"></div></div>
+  <div id="root"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+const {useState,useEffect}=React;
+
+// Guard: solo vendedor
+(()=>{ const s=getSess(); if(!s||s.role!=="vend") window.location.href="index.html"; })();
+
+function useMobile(){ const [m,setM]=useState(window.innerWidth<768); useEffect(()=>{const h=()=>setM(window.innerWidth<768);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);return m; }
+
+function Field({label,children}){return(<div style={{marginBottom:14}}><label style={{display:"block",color:GR,fontSize:11,marginBottom:5,letterSpacing:1}}>{label.toUpperCase()}</label>{children}</div>);}
+
+const NAV=[
+  {id:"nueva-venta",label:"Venta",icon:"🛒"},
+  {id:"remitos",label:"Remitos",icon:"🚚"},
+  {id:"listas",label:"Listas",icon:"🏷️"},
+];
+
+function TopBar({title}){
+  const logout=()=>{clearSess();window.location.href="index.html";};
+  return(<div style={{background:"#0c1420",borderBottom:"1px solid "+BR,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+    <div style={{fontFamily:"Orbitron,sans-serif",fontSize:11,color:G,letterSpacing:2}}>{title||"TD GESTIÓN"}</div>
+    <div style={{display:"flex",gap:10,alignItems:"center"}}>
+      <span style={{fontSize:11,color:GR,background:CB,padding:"2px 8px",borderRadius:10}}>Vendedor</span>
+      <button onClick={logout} style={{background:"transparent",border:"none",color:GR,cursor:"pointer",fontSize:18}} title="Cerrar sesión">🚪</button>
+    </div>
+  </div>);
+}
+
+function BottomNav({view,setView}){
+  return(<nav style={{background:"#0c1420",borderTop:"1px solid "+BR,display:"flex",flexShrink:0}}>
+    {NAV.map(n=>{const act=view===n.id;return(<button key={n.id} onClick={()=>setView(n.id)} style={{flex:1,background:"transparent",border:"none",padding:"8px 4px 10px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+      <span style={{fontSize:22}}>{n.icon}</span>
+      <span style={{fontSize:10,color:act?G:GR,fontFamily:"Montserrat,sans-serif",fontWeight:act?700:400}}>{n.label}</span>
+      {act&&<div style={{width:4,height:4,borderRadius:"50%",background:G}}/>}
+    </button>);})}
+  </nav>);
+}
+
+function DesktopSidebar({view,setView}){
+  const logout=()=>{clearSess();window.location.href="index.html";};
+  return(<aside style={{width:200,background:"#0c1420",borderRight:"1px solid "+BR,display:"flex",flexDirection:"column",flexShrink:0}}>
+    <div style={{padding:"20px 16px 16px",borderBottom:"1px solid "+BR}}>
+      <div style={{fontFamily:"Orbitron,sans-serif",fontSize:12,color:W,fontWeight:700,letterSpacing:1}}>TOMÁS DOTTI</div>
+      <div style={{fontSize:9,color:G,letterSpacing:1,marginTop:2}}>BOLSAS Y ROLLOS</div>
+      <div style={{marginTop:8,fontSize:11,color:GR,background:G+"15",border:"1px solid "+G+"44",borderRadius:8,padding:"3px 8px",display:"inline-block"}}>Vendedor</div>
+    </div>
+    <nav style={{padding:"12px 0",flex:1}}>
+      {NAV.map(item=>(<button key={item.id} onClick={()=>setView(item.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:view===item.id?G+"20":"transparent",border:"none",borderLeft:view===item.id?"3px solid "+G:"3px solid transparent",color:view===item.id?G:GR,cursor:"pointer",fontSize:13,fontFamily:"Montserrat,sans-serif",fontWeight:view===item.id?700:400,textAlign:"left"}}>
+        <span style={{fontSize:18}}>{item.icon}</span><span>{item.label}</span>
+      </button>))}
+    </nav>
+    <div style={{borderTop:"1px solid "+BR}}>
+      <button onClick={logout} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"transparent",border:"none",color:RE,cursor:"pointer",fontSize:13,fontFamily:"Montserrat,sans-serif",textAlign:"left"}}>
+        <span style={{fontSize:16}}>🚪</span><span>Cerrar sesión</span>
+      </button>
+    </div>
+  </aside>);
+}
+
+// ── Nueva Venta ──────────────────────────────────────────────────────────────
+function NuevaVenta({productos,setProd,clientes,setVentas,isMobile}){
+  const [tab,setTab]=useState("catalogo");
+  const [clienteId,setClienteId]=useState("");const [usarLista,setUsarLista]=useState(true);const [clienteMan,setClienteMan]=useState("");
+  const [items,setItems]=useState([]);const [nota,setNota]=useState("");const [descuento,setDescuento]=useState(0);const [ok,setOk]=useState(null);
+  const [desc,setDesc]=useState("");const [detalle,setDetalle]=useState("");const [cantL,setCantL]=useState(1);const [unidadL,setUnidadL]=useState("unidades");const [precioL,setPrecioL]=useState("");
+  const [saving,setSaving]=useState(false);
+  const cliente=usarLista?clientes.find(c=>c.id===+clienteId):null;
+  const nombreCli=usarLista?(cliente?.nombre||""):clienteMan;
+  const sub=items.reduce((a,i)=>a+i.precio*i.cantidad,0);
+  const total=sub-sub*descuento/100;
+  const addLibre=()=>{
+    if(!desc.trim()||cantL<=0||!precioL){alert("Completá descripción, cantidad y precio.");return;}
+    const nm=detalle?desc.trim()+" ("+detalle.trim()+")":desc.trim();
+    setItems(prev=>[...prev,{productoId:uid(),nombre:nm,cantidad:+cantL,unidad:unidadL,precio:+precioL,tipo:"libre"}]);
+    setDesc("");setCantL(1);setUnidadL("unidades");setPrecioL("");setDetalle("");
+  };
+  const confirmar=async()=>{
+    if(!nombreCli||items.length===0){alert("Seleccioná cliente y agregá productos.");return;}
+    setSaving(true);
+    const nro="TD"+Date.now().toString(36).toUpperCase().slice(-6)+Math.random().toString(36).toUpperCase().slice(2,5);
+    const hayCat=items.some(i=>i.tipo==="catalogo");const hayLib=items.some(i=>i.tipo==="libre");
+    const venta={nro,fecha:new Date().toISOString(),clienteId:cliente?.id||null,clienteNombre:nombreCli,clienteDireccion:cliente?.direccion||"",clienteTelefono:cliente?.telefono||"",clienteCuit:cliente?.cuit||"",items,subtotal:sub,descuento,total,nota,estado:"pendiente",esLibre:hayLib&&!hayCat,esMixto:hayLib&&hayCat};
+    const saved=await db.saveVenta(venta);
+    if(saved){
+      if(hayCat) await db.updateStock(items,productos,setProd);
+      setVentas(prev=>[saved,...prev]);
+      setOk(saved);
+    }
+    setSaving(false);
+  };
+  const reset=()=>{setItems([]);setClienteId("");setClienteMan("");setNota("");setDescuento(0);setOk(null);};
+
+  if(ok){
+    const txtWA="🧾 *COMPROBANTE "+ok.nro+" — TOMÁS DOTTI*\n👤 *"+ok.clienteNombre+"*\n📅 "+fdate(ok.fecha)+"\n\n"+(ok.items||[]).map(i=>"• "+i.nombre+": "+i.cantidad+" "+i.unidad+"s x "+money(i.precio)).join("\n")+"\n\n💰 *TOTAL: "+money(ok.total)+"*";
+    return(<div style={{padding:20,display:"flex",flexDirection:"column",gap:16,alignItems:"center"}}>
+      <div style={{background:G+"18",border:"1px solid "+G,borderRadius:16,padding:28,textAlign:"center",maxWidth:400,width:"100%"}}>
+        <div style={{fontSize:44,marginBottom:10}}>✅</div>
+        <h2 style={{color:G,fontFamily:"Orbitron,sans-serif",fontSize:15,marginBottom:8}}>¡Venta Confirmada!</h2>
+        <p style={{color:W,marginBottom:4,fontSize:13}}>Cód. {ok.nro}</p>
+        <p style={{color:GR,fontSize:12,marginBottom:16}}>{ok.clienteNombre} — {money(ok.total)}</p>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {ok.clienteTelefono&&<button onClick={()=>waOpen(ok.clienteTelefono,txtWA)} style={{...Btn(WA,W),width:"100%"}}>📲 Enviar comprobante WA</button>}
+          <button onClick={reset} style={{...Btn("transparent",GR),width:"100%"}}>+ Nueva Venta</button>
+        </div>
+      </div>
+    </div>);
+  }
+
+  const catView=(<div style={{background:CA,border:"1px solid "+BR,borderRadius:12,padding:12,marginBottom:12}}>
+    <div style={{color:GR,fontSize:10,letterSpacing:1,marginBottom:10}}>📦 TOCÁ + / − PARA AGREGAR</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+      {productos.filter(p=>p.stock>0).map(p=>{
+        const en=items.find(i=>i.productoId===p.id&&i.tipo==="catalogo");const cantAct=en?.cantidad||0;
+        return(<div key={p.id} style={{background:cantAct>0?G+"18":D,border:"1px solid "+(cantAct>0?G:BR),borderRadius:10,padding:10,display:"flex",flexDirection:"column",gap:5}}>
+          <div style={{color:W,fontSize:11,fontWeight:600,lineHeight:1.3}}>{p.nombre}</div>
+          <div style={{color:G,fontSize:12,fontWeight:700}}>{money(p.precio)}</div>
+          <div style={{color:GR,fontSize:10}}>Stock: {p.stock}</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+            <button onClick={()=>{if(cantAct<=1)setItems(prev=>prev.filter(i=>!(i.productoId===p.id&&i.tipo==="catalogo")));else setItems(prev=>prev.map(i=>i.productoId===p.id&&i.tipo==="catalogo"?{...i,cantidad:i.cantidad-1}:i));}} style={{background:cantAct>0?RE+"22":"#1a2232",border:"1px solid "+(cantAct>0?RE:BR),color:cantAct>0?RE:BR,borderRadius:8,width:32,height:32,fontSize:18,cursor:cantAct>0?"pointer":"default",fontWeight:700,lineHeight:"1.6"}}>−</button>
+            <div style={{flex:1,textAlign:"center",fontFamily:"Orbitron,sans-serif",fontSize:16,color:cantAct>0?G:GR,fontWeight:700}}>{cantAct}</div>
+            <button onClick={()=>{if(cantAct>=p.stock){alert("Stock máximo: "+p.stock);return;}if(cantAct===0)setItems(prev=>[...prev,{productoId:p.id,nombre:p.nombre,precio:p.precio,cantidad:1,unidad:p.unidad,tipo:"catalogo"}]);else setItems(prev=>prev.map(i=>i.productoId===p.id&&i.tipo==="catalogo"?{...i,cantidad:i.cantidad+1}:i));}} style={{background:G+"22",border:"1px solid "+G,color:G,borderRadius:8,width:32,height:32,fontSize:18,cursor:"pointer",fontWeight:700,lineHeight:"1.6"}}>+</button>
+          </div>
+        </div>);
+      })}
+    </div>
+  </div>);
+
+  const libreView=(<div style={{background:CA,border:"1px solid "+G+"44",borderRadius:12,padding:16,marginBottom:12}}>
+    <div style={{color:G,fontSize:10,letterSpacing:1,marginBottom:12,fontWeight:800}}>✏️ PRODUCTO LIBRE — sin stock</div>
+    <Field label="Descripción"><input style={inp} placeholder="Ej: Bolsa 100x160" value={desc} onChange={e=>setDesc(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addLibre()}/></Field>
+    <Field label="Detalle extra (opcional)"><input style={inp} placeholder="Ej: 130 micrones" value={detalle} onChange={e=>setDetalle(e.target.value)}/></Field>
+    <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 2fr auto",gap:8,alignItems:"flex-end"}}>
+      <div><div style={{color:GR,fontSize:10,letterSpacing:1,marginBottom:5}}>CANTIDAD</div><input type="number" min={1} style={inp} value={cantL} onChange={e=>setCantL(+e.target.value)}/></div>
+      <div><div style={{color:GR,fontSize:10,letterSpacing:1,marginBottom:5}}>UNIDAD</div><input style={inp} value={unidadL} onChange={e=>setUnidadL(e.target.value)}/></div>
+      <div><div style={{color:GR,fontSize:10,letterSpacing:1,marginBottom:5}}>PRECIO ($)</div><input type="number" min={0} style={inp} placeholder="0" value={precioL} onChange={e=>setPrecioL(e.target.value)}/></div>
+      <button onClick={addLibre} style={{...Btn(G,D,{padding:"10px 16px",fontSize:18,height:42,alignSelf:"flex-end"})}}>+</button>
+    </div>
+  </div>);
+
+  return(<div style={{padding:14,paddingBottom:isMobile?80:20}}>
+    <div style={{background:CA,border:"1px solid "+BR,borderRadius:12,padding:14,marginBottom:12}}>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        {[["Lista",true],["Manual",false]].map(([l,v])=>(<button key={l} onClick={()=>setUsarLista(v)} style={{...Btn(usarLista===v?G:"transparent",usarLista===v?D:GR,{padding:"5px 12px",fontSize:11,flex:1})}}>{l}</button>))}
+      </div>
+      {usarLista?<select style={inp} value={clienteId} onChange={e=>setClienteId(e.target.value)}><option value="">Seleccioná cliente...</option>{clientes.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}</select>:<input style={inp} placeholder="Nombre del cliente..." value={clienteMan} onChange={e=>setClienteMan(e.target.value)}/>}
+      {cliente&&<div style={{fontSize:12,color:GR,marginTop:6}}>📍 {cliente.direccion} · 📱 {cliente.telefono}</div>}
+    </div>
+    <div style={{display:"flex",background:"#0c1420",borderRadius:10,padding:4,marginBottom:12,gap:4}}>
+      {[["catalogo","📦 Catálogo"],["libre","✏️ Libre"]].map(([id,lbl])=>(<button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"9px 8px",border:"none",borderRadius:8,cursor:"pointer",background:tab===id?G:"transparent",color:tab===id?D:GR,fontFamily:"Montserrat,sans-serif",fontWeight:tab===id?700:400,fontSize:13}}>{lbl}</button>))}
+    </div>
+    {tab==="catalogo"&&catView}
+    {tab==="libre"&&libreView}
+    {items.length>0&&(<div style={{marginBottom:12}}>
+      <div style={{background:CA,border:"1px solid "+BR,borderRadius:12,padding:12,marginBottom:8}}>
+        {items.map(it=>(<div key={it.productoId} style={{display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:12,gap:8}}>
+          <span style={{color:it.tipo==="libre"?YE:GR,flex:1}}>{it.cantidad}× {it.nombre}</span>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+            <span style={{color:W}}>{money(it.precio*it.cantidad)}</span>
+            <button onClick={()=>setItems(prev=>prev.filter(i=>i.productoId!==it.productoId))} style={{background:"transparent",border:"none",color:RE,cursor:"pointer",fontSize:14,padding:"2px"}}>✕</button>
+          </div>
+        </div>))}
+        {descuento>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:YE,marginTop:4}}><span>Descuento {descuento}%</span><span>-{money(sub*descuento/100)}</span></div>}
+      </div>
+      <div style={{display:"block",marginBottom:8}}><div style={{color:GR,fontSize:10,letterSpacing:1,marginBottom:5}}>DESCUENTO ({descuento}%)</div><input type="range" min={0} max={50} value={descuento} onChange={e=>setDescuento(+e.target.value)} style={{width:"100%",accentColor:G}}/></div>
+      <Field label="Nota (opcional)"><textarea rows={2} value={nota} onChange={e=>setNota(e.target.value)} placeholder="Ej: Entregar por la tarde..." style={{...inp,resize:"none"}}/></Field>
+    </div>)}
+    {items.length>0&&isMobile&&(<div style={{position:"fixed",bottom:60,left:0,right:0,background:"#0c1420",borderTop:"1px solid "+BR,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",zIndex:40}}>
+      <div><div style={{fontSize:10,color:GR}}>TOTAL ({items.length} ítem{items.length!==1?"s":""})</div><div style={{fontFamily:"Orbitron,sans-serif",fontSize:16,color:G,fontWeight:700}}>{money(total)}</div></div>
+      <button onClick={confirmar} disabled={saving} style={{...Btn(G,D,{fontSize:12,padding:"10px 20px"}),opacity:saving?0.7:1}}>{saving?"...":"✓ Confirmar"}</button>
+    </div>)}
+    {items.length>0&&!isMobile&&(<div style={{background:CA,border:"1px solid "+G+"55",borderRadius:12,padding:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <span style={{color:W,fontWeight:700}}>TOTAL</span>
+        <span style={{fontFamily:"Orbitron,sans-serif",fontSize:20,color:G,fontWeight:700}}>{money(total)}</span>
+      </div>
+      <button onClick={confirmar} disabled={saving} style={{...Btn(G,D),width:"100%",fontFamily:"Orbitron,sans-serif",fontSize:12,letterSpacing:1,opacity:saving?0.7:1}}>{saving?"GUARDANDO...":"CONFIRMAR VENTA"}</button>
+    </div>)}
+  </div>);
+}
+
+// ── Remitos ──────────────────────────────────────────────────────────────────
+function Remitos({ventas,setVentas}){
+  const [filtro,setFiltro]=useState("pendiente");
+  const fil=ventas.filter(v=>filtro==="todos"||v.estado===filtro);
+  const marcar=async(id,est)=>await db.updateVentaEstado(id,est,setVentas);
+  const txtRemito=v=>"🚚 *REMITO DE ENTREGA — TOMÁS DOTTI*\n📅 "+fdate(v.fecha)+" · N° "+v.nro+"\n\n👤 *"+v.clienteNombre+"*\n📍 "+(v.clienteDireccion||"-")+"\n📱 "+(v.clienteTelefono||"-")+"\n\n📦 PRODUCTOS:\n"+(v.items||[]).map(i=>"• "+i.nombre+": *"+i.cantidad+" "+i.unidad+"s*").join("\n")+(v.nota?"\n\n📝 "+v.nota:"");
+  return(<div style={{padding:16}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+      <h1 style={{fontFamily:"Orbitron,sans-serif",fontSize:18,color:W,margin:0}}>Remitos</h1>
+      <div style={{display:"flex",gap:6}}>
+        {["pendiente","entregado","todos"].map(f=>(<button key={f} onClick={()=>setFiltro(f)} style={{...Btn(filtro===f?G:"transparent",filtro===f?D:GR,{fontSize:11,padding:"6px 12px"})}}>{f==="pendiente"?"⏳":f==="entregado"?"✅":"📋"} {f==="pendiente"?"Pendiente":f==="entregado"?"Entregado":"Todos"}</button>))}
+      </div>
+    </div>
+    {fil.length===0?<div style={{textAlign:"center",padding:60,color:GR}}><div style={{fontSize:48,marginBottom:12}}>🚚</div><p>No hay entregas {filtro==="todos"?"":"con estado "+filtro}.</p></div>:
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {fil.map(v=>(<div key={v.id} style={{background:CA,border:"1px solid "+(v.estado==="pendiente"?YE+"55":G+"44"),borderRadius:12,padding:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{color:v.estado==="pendiente"?YE:G,fontFamily:"Orbitron,sans-serif",fontSize:10,fontWeight:700}}>{v.estado==="pendiente"?"⏳ PENDIENTE":"✅ ENTREGADO"}</span><span style={{color:GR,fontSize:11}}>N° {v.nro} · {fdate(v.fecha)}</span></div>
+        <div style={{color:W,fontWeight:700,fontSize:14,marginBottom:4}}>{v.clienteNombre}</div>
+        {v.clienteDireccion&&<div style={{color:GR,fontSize:12,marginBottom:2}}>📍 {v.clienteDireccion}</div>}
+        {v.clienteTelefono&&<div style={{color:GR,fontSize:12,marginBottom:10}}>📱 {v.clienteTelefono}</div>}
+        <div style={{background:D,borderRadius:8,padding:10,marginBottom:10}}>
+          {(v.items||[]).map(i=>(<div key={i.productoId} style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}><span style={{color:W}}>{i.nombre}</span><span style={{color:G,fontWeight:700}}>{i.cantidad} {i.unidad}s</span></div>))}
+        </div>
+        {v.nota&&<div style={{color:GR,fontSize:12,marginBottom:10}}>📝 {v.nota}</div>}
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>waOpen(v.clienteTelefono,txtRemito(v))} style={{...Btn(WA,W,{flex:1,fontSize:12})}}>📲 Enviar</button>
+          {v.estado==="pendiente"?<button onClick={()=>marcar(v.id,"entregado")} style={{...Btn(G,D,{flex:1,fontSize:12})}}>✓ Entregado</button>:<button onClick={()=>marcar(v.id,"pendiente")} style={{...Btn("transparent",GR,{flex:1,fontSize:12})}}>↩ Revertir</button>}
+        </div>
+      </div>))}
+    </div>}
+  </div>);
+}
+
+// ── Listas de Precios ────────────────────────────────────────────────────────
+const LISTAS=[
+  {id:"negras",nombre:"Lista Bolsas Planas — Negras",emoji:"🛍️",nota:null,filtro:p=>p.categoria==="Bolsas de Residuos"&&!p.nombre.includes("Verdes")&&!p.nombre.includes("Patogena")&&!p.nombre.includes("Albañ")},
+  {id:"verdes",nombre:"Lista Bolsas Planas — Verdes",emoji:"🟢",nota:null,filtro:p=>p.categoria==="Bolsas de Residuos"&&p.nombre.includes("Verdes")},
+  {id:"especiales",nombre:"Lista Bolsas Especiales",emoji:"⚙️",nota:null,filtro:p=>p.categoria==="Bolsas de Residuos"&&(p.nombre.includes("Patogena")||p.nombre.includes("Albañ"))},
+  {id:"estrella",nombre:"Rollos Fondo Estrella",emoji:"⭐",nota:"Compra mínima 500 rollos por medida.",filtro:p=>p.categoria==="Rollos Fondo Estrella"},
+  {id:"dottiplast",nombre:"Rollos Dottiplast",emoji:"🔵",nota:null,filtro:p=>p.categoria==="Rollos de Residuos"&&p.nombre.includes("Dottiplast")},
+  {id:"antartica",nombre:"Lista Antártida",emoji:"🏔️",nota:null,filtro:p=>p.nombre.includes("Flowi")||p.categoria==="Camisetas y Arranque"},
+  {id:"bobinas",nombre:"Lista Bobinas",emoji:"🔩",nota:"Compra mínima 200 kg. Precios por kg.",filtro:p=>p.categoria==="Bobinas"},
+  {id:"stretch",nombre:"Film Stretch",emoji:"🎬",nota:null,filtro:p=>p.categoria==="Film Stretch"},
+  {id:"completo",nombre:"Catálogo Completo",emoji:"📋",nota:null,filtro:()=>true},
+];
+
+function ListasPrecios({productos,clientes}){
+  const [listaId,setListaId]=useState("negras");
+  const [vigencia,setVigencia]=useState(()=>{const d=new Date();return new Date(d.getFullYear(),d.getMonth()+1,0).toLocaleDateString("es-AR");});
+  const [destino,setDestino]=useState("");const [clienteId,setClienteId]=useState("");const [usarCli,setUsarCli]=useState(false);
+  const [copiado,setCopiado]=useState(false);const [showListas,setShowListas]=useState(true);
+  const lista=LISTAS.find(l=>l.id===listaId);
+  const prods=productos.filter(lista.filtro).filter(p=>p.precio>0);
+  const cliente=clientes.find(c=>c.id===+clienteId);
+  const tel=usarCli?(cliente?.telefono||""):destino;
+  const genTxt=()=>{
+    const header="🏷️ *"+lista.nombre.toUpperCase()+"*\n*TOMÁS DOTTI* — Bolsas y Rollos de Residuos\n📱 Cel: 2346 593483 | WA: 2346 625220\n✉️ Tomasdotti278@gmail.com\n━━━━━━━━━━━━━━━━━━━━";
+    const lineas=prods.map(p=>"• *"+p.nombre+"*\n  💰 "+money(p.precio)+" / "+p.unidad).join("\n");
+    const footer=lista.nota?"━━━━━━━━━━━━━━━━━━━━\n📌 _"+lista.nota+"_\n\n📅 Vigencia: "+vigencia:"━━━━━━━━━━━━━━━━━━━━\n📅 Vigencia: "+vigencia;
+    return header+"\n\n"+lineas+"\n\n"+footer;
+  };
+  const txt=genTxt();
+  return(<div style={{padding:14}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <h1 style={{fontFamily:"Orbitron,sans-serif",fontSize:18,color:W,margin:0}}>Listas de Precios</h1>
+      <button onClick={()=>setShowListas(s=>!s)} style={{...Btn("transparent",G,{padding:"6px 12px",fontSize:12})}}>📋 {showListas?"Ocultar":"Elegir lista"}</button>
+    </div>
+    {showListas&&(<div style={{marginBottom:14}}>
+      {LISTAS.map(l=>{const cnt=productos.filter(l.filtro).filter(p=>p.precio>0).length;return(<button key={l.id} onClick={()=>{setListaId(l.id);setShowListas(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:listaId===l.id?G+"18":CA,border:"1px solid "+(listaId===l.id?G:BR),borderRadius:10,marginBottom:6,cursor:"pointer",color:listaId===l.id?G:W,fontFamily:"Montserrat,sans-serif",fontSize:12,fontWeight:listaId===l.id?700:400,textAlign:"left"}}>
+        <span style={{fontSize:16}}>{l.emoji}</span><div style={{flex:1}}><div>{l.nombre}</div><div style={{fontSize:10,color:GR,marginTop:1}}>{cnt} prod.</div></div>{listaId===l.id&&<span>▶</span>}
+      </button>);})}
+    </div>)}
+    <div style={{background:CA,border:"1px solid "+BR,borderRadius:12,padding:14,marginBottom:12}}>
+      <Field label="Vigencia"><input style={inp} value={vigencia} onChange={e=>setVigencia(e.target.value)}/></Field>
+      <div style={{color:GR,fontSize:10,letterSpacing:1,marginBottom:6}}>ENVIAR A</div>
+      <div style={{display:"flex",gap:6,marginBottom:8}}>{[["Número",false],["Cliente",true]].map(([l,v])=>(<button key={l} onClick={()=>setUsarCli(v)} style={{...Btn(usarCli===v?G:"transparent",usarCli===v?D:GR,{padding:"5px 12px",fontSize:11,flex:1})}}>{l}</button>))}</div>
+      {usarCli?<select style={inp} value={clienteId} onChange={e=>setClienteId(e.target.value)}><option value="">Seleccioná cliente...</option>{clientes.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}</select>:<input style={inp} placeholder="Ej: 1145678901" value={destino} onChange={e=>setDestino(e.target.value)}/>}
+    </div>
+    <div style={{background:CA,border:"1px solid "+BR,borderRadius:12,marginBottom:12,overflow:"hidden"}}>
+      <div style={{background:"#0c1420",padding:"10px 14px",borderBottom:"1px solid "+BR}}>
+        <div style={{color:W,fontWeight:700,fontSize:12}}>{lista.nombre.toUpperCase()}</div>
+        <div style={{color:GR,fontSize:11,marginTop:2}}>Vigencia: {vigencia}</div>
+      </div>
+      {prods.length===0?<div style={{padding:20,textAlign:"center",color:GR}}>No hay productos.</div>:
+      <div style={{padding:"4px 0"}}>
+        {prods.map(p=>(<div key={p.id} style={{display:"flex",justifyContent:"space-between",padding:"9px 14px",borderBottom:"1px solid "+BR,fontSize:12}}>
+          <span style={{color:W,flex:1}}>{p.nombre}</span>
+          <span style={{color:G,fontWeight:700,marginRight:10}}>{money(p.precio)}</span>
+          <span style={{color:GR,fontSize:10,marginTop:1}}>{p.unidad}</span>
+        </div>))}
+      </div>}
+      {lista.nota&&<div style={{padding:"8px 14px",background:YE+"0f",borderTop:"1px solid "+BR,color:YE,fontSize:11}}>📌 {lista.nota}</div>}
+    </div>
+    <div style={{display:"flex",gap:10}}>
+      <button onClick={()=>waOpen(tel,txt)} style={{...Btn(WA,W),flex:1,fontFamily:"Orbitron,sans-serif",fontSize:11,letterSpacing:1}}>📲 {tel?"Enviar a "+tel:"Enviar WA"}</button>
+      <button onClick={()=>{navigator.clipboard?.writeText(txt).then(()=>{setCopiado(true);setTimeout(()=>setCopiado(false),2500);});}} style={{...Btn("transparent",copiado?G:GR,{padding:"10px 18px",fontSize:12,borderColor:copiado?G:BR})}}>{copiado?"✓":"📋"}</button>
+    </div>
+  </div>);
+}
+
+// ── App ──────────────────────────────────────────────────────────────────────
+function App(){
+  const [view,setView]=useState("nueva-venta");
+  const [productos,setProductos]=useState([]);
+  const [clientes,setClientes]=useState([]);
+  const [ventas,setVentas]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const isMobile=useMobile();
+
+  useEffect(()=>{
+    (async()=>{
+      try{
+        let data=await db.loadAll();
+        data=await db.seedIfEmpty(data);
+        setProductos(data.productos);
+        setClientes(data.clientes);
+        setVentas(data.ventas);
+      }catch(e){console.error("Error:",e);}
+      setLoading(false);
+      const s=document.getElementById("splash");
+      if(s){s.style.opacity="0";setTimeout(()=>s.remove(),400);}
+    })();
+  },[]);
+
+  if(loading)return null;
+
+  const getTitle=()=>NAV.find(x=>x.id===view)?.label||"TD Gestión";
+  const content=(<>
+    {view==="nueva-venta"&&<NuevaVenta productos={productos} setProd={setProductos} clientes={clientes} setVentas={setVentas} isMobile={isMobile}/>}
+    {view==="remitos"&&<Remitos ventas={ventas} setVentas={setVentas}/>}
+    {view==="listas"&&<ListasPrecios productos={productos} clientes={clientes}/>}
+  </>);
+
+  if(isMobile) return(
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",fontFamily:"Montserrat,sans-serif",background:D,color:W}}>
+      <TopBar title={getTitle()}/>
+      <main style={{flex:1,overflowY:"auto"}}>{content}</main>
+      <BottomNav view={view} setView={setView}/>
+    </div>
+  );
+
+  return(
+    <div style={{display:"flex",height:"100vh",overflow:"hidden",fontFamily:"Montserrat,sans-serif",background:D,color:W}}>
+      <DesktopSidebar view={view} setView={setView}/>
+      <main style={{flex:1,overflowY:"auto"}}>{content}</main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  </script>
+</body>
+</html>
