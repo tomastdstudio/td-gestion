@@ -30,7 +30,17 @@ const inp = {width:"100%",background:D,border:"1px solid "+BR,borderRadius:8,pad
 const Btn = (bg,col,extra={}) => ({background:bg,color:col,border:"1px solid "+(bg==="transparent"?BR:bg),borderRadius:8,padding:"10px 18px",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"Montserrat,sans-serif",...extra});
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
-const getPass  = r => localStorage.getItem(r==="admin"?"td_pass_admin":"td_pass_vend") || (r==="admin"?"admin2024":"venta2024");
+const _passCache = {};
+const loadPasswords = async () => {
+  const {data} = await SB.from("config").select("clave,valor").in("clave",["pass_admin","pass_vend"]);
+  (data||[]).forEach(r=>{ _passCache[r.clave]=r.valor; });
+};
+const getPass = r => _passCache[r==="admin"?"pass_admin":"pass_vend"] || (r==="admin"?"admin2024":"venta2024");
+const setPass = async (r,v) => {
+  const clave = r==="admin"?"pass_admin":"pass_vend";
+  await SB.from("config").update({valor:v}).eq("clave",clave);
+  _passCache[clave]=v;
+};
 const checkLogin = (u,p) => {
   if(u==="admin"   && p===getPass("admin")) return {role:"admin",nombre:"Administrador"};
   if(u==="vendedor"&& p===getPass("vend"))  return {role:"vend", nombre:"Vendedor"};

@@ -128,10 +128,10 @@ function BottomNav({view,setView}){
 // ── Config ───────────────────────────────────────────────────────────────────
 function Config(){
   const [na,setNa]=useState(""); const [nv,setNv]=useState(""); const [msg,setMsg]=useState("");
-  const save=()=>{
+  const save=async()=>{
     let ok=false;
-    if(na&&na.length>=6){localStorage.setItem("td_pass_admin",na);ok=true;}
-    if(nv&&nv.length>=6){localStorage.setItem("td_pass_vend",nv);ok=true;}
+    if(na&&na.length>=6){await setPass("admin",na);ok=true;}
+    if(nv&&nv.length>=6){await setPass("vend",nv);ok=true;}
     if(ok){setMsg("✓ Contraseñas actualizadas.");setNa("");setNv("");setTimeout(()=>setMsg(""),3000);}
     else setMsg("Mínimo 6 caracteres por contraseña.");
   };
